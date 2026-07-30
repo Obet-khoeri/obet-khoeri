@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { basename, resolve } from "node:path";
+import { homedir } from "node:os";
+import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
@@ -19,6 +21,40 @@ const portraitFilter = [
   "unsharp=3:3:0.35"
 ].join(",");
 
+function ffmpegCandidates() {
+  const localAppData = process.env.LOCALAPPDATA;
+
+  return [
+    process.env.FFMPEG_PATH,
+    "ffmpeg",
+    localAppData ? join(localAppData, "Microsoft", "WinGet", "Links", "ffmpeg.exe") : null,
+    join(homedir(), "scoop", "shims", "ffmpeg.exe"),
+    "C:\\ffmpeg\\bin\\ffmpeg.exe"
+  ].filter(Boolean);
+}
+
+async function resolveFfmpegPath() {
+  for (const candidate of ffmpegCandidates()) {
+    if (candidate !== "ffmpeg" && !existsSync(candidate)) {
+      continue;
+    }
+
+    try {
+      await execFileAsync(candidate, ["-version"], { timeout: 10000 });
+      return candidate;
+    } catch (error) {
+      if (error.code === "ENOENT") {
+        continue;
+      }
+    }
+  }
+
+  throw new Error(
+    "ffmpeg not found. Install it with: winget install Gyan.FFmpeg\n" +
+      "Then open a new terminal, or set FFMPEG_PATH to the full path of ffmpeg.exe."
+  );
+}
+
 function buildProfileLines(projects) {
   const shortNames = {
     "Nova AI Wallet": "Nova AI"
@@ -26,9 +62,9 @@ function buildProfileLines(projects) {
 
   return [
     { type: "header", value: "wildan@build" },
-    { type: "row", key: "Name", value: "Wildan Syukri Niam" },
+    { type: "row", key: "Name", value: "Ubeid Khoery" },
     { type: "row", key: "Role", value: "Full-Stack Builder" },
-    { type: "row", key: "Based", value: "Bandung, Indonesia" },
+    { type: "row", key: "Based", value: "Purwokerto, Indonesia" },
     { type: "row", key: "Mode", value: "Designing / Building / Shipping" },
     { type: "blank" },
     { type: "section", value: "BUILD.FOCUS" },
@@ -200,9 +236,9 @@ function parsePgm(buffer) {
   return { width: Number(width.value), height: Number(height.value), pixels };
 }
 
-async function samplePortrait(sourcePath, columns, rows) {
+async function samplePortrait(ffmpegPath, sourcePath, columns, rows) {
   const { stdout } = await execFileAsync(
-    "ffmpeg",
+    ffmpegPath,
     [
       "-v", "error",
       "-i", sourcePath,
@@ -405,9 +441,10 @@ async function main() {
   }
 
   const profileLines = buildProfileLines(projects);
+  const ffmpegPath = await resolveFfmpegPath();
   const portraits = {
-    desktop: await samplePortrait(sourcePath, layouts.desktop.portrait.columns, layouts.desktop.portrait.rows),
-    mobile: await samplePortrait(sourcePath, layouts.mobile.portrait.columns, layouts.mobile.portrait.rows)
+    desktop: await samplePortrait(ffmpegPath, sourcePath, layouts.desktop.portrait.columns, layouts.desktop.portrait.rows),
+    mobile: await samplePortrait(ffmpegPath, sourcePath, layouts.mobile.portrait.columns, layouts.mobile.portrait.rows)
   };
   const generated = outputs.map((output) => ({
     ...output,
