@@ -12,9 +12,10 @@ const outputDirectory = resolve(scriptDirectory, "../assets/hero");
 const featuredProjectsPath = resolve(scriptDirectory, "../data/featured-projects.json");
 
 const portraitFilter = [
-  "crop=1700:1900:800:1950",
+  "scale=1900:-2:force_original_aspect_ratio=increase",
+  "crop=1700:1900:(iw-1700)/2:(ih-1900)/2",
   "format=gray",
-  "eq=contrast=1.18:brightness=0.04:gamma=0.96",
+  "eq=contrast=1.12:brightness=0.02:gamma=0.98",
   "unsharp=3:3:0.35"
 ].join(",");
 
@@ -182,7 +183,12 @@ function parsePgm(buffer) {
   }
 
   let pixelOffset = maxValue.offset;
-  while (pixelOffset < buffer.length && [9, 10, 13, 32].includes(buffer[pixelOffset])) pixelOffset += 1;
+  if (buffer[pixelOffset] === 10) {
+    pixelOffset += 1;
+  } else if (buffer[pixelOffset] === 13) {
+    pixelOffset += 1;
+    if (buffer[pixelOffset] === 10) pixelOffset += 1;
+  }
 
   const pixelCount = Number(width.value) * Number(height.value);
   const pixels = buffer.subarray(pixelOffset, pixelOffset + pixelCount);
@@ -199,10 +205,8 @@ async function samplePortrait(sourcePath, columns, rows) {
     "ffmpeg",
     [
       "-v", "error",
-      "-f", "lavfi",
-      "-i", "color=c=white:s=3072x4096",
       "-i", sourcePath,
-      "-filter_complex", `[0:v][1:v]overlay=shortest=1:format=auto,${portraitFilter},scale=${columns}:${rows}`,
+      "-filter_complex", `[0:v]${portraitFilter},scale=${columns}:${rows}`,
       "-frames:v", "1",
       "-f", "image2pipe",
       "-vcodec", "pgm",
